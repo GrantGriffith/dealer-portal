@@ -10,18 +10,18 @@ async function getStats() {
     sql`SELECT COUNT(*)::int AS count FROM manufacturers`,
   ])
   return {
-    totalDealers:  (dealers.rows[0] as { count: number }).count,
-    activeDealers: (active.rows[0]  as { count: number }).count,
-    manufacturers: (mfr.rows[0]    as { count: number }).count,
+    totalDealers:  (dealers[0] as { count: number }).count,
+    activeDealers: (active[0]  as { count: number }).count,
+    manufacturers: (mfr[0]    as { count: number }).count,
   }
 }
 
 async function getRecentDealers() {
-  const result = await sql`
+  const rows = await sql`
     SELECT id, first_name, last_name, company, email, is_active, created_at
     FROM dealers ORDER BY created_at DESC LIMIT 10
   `
-  return result.rows as {
+  return rows as {
     id: number; first_name: string; last_name: string;
     company: string; email: string; is_active: boolean; created_at: string
   }[]
