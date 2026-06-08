@@ -88,7 +88,7 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
           await fetch(`/api/admin/dealers/${data.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ manufacturerIds: [...selectedMfrs] }),
+            body: JSON.stringify({ manufacturerIds: Array.from(selectedMfrs) }),
           })
         }
 
@@ -97,7 +97,7 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
       } else {
         const body: Record<string, unknown> = {
           firstName, lastName, company, isActive,
-          manufacturerIds: [...selectedMfrs],
+          manufacturerIds: Array.from(selectedMfrs),
         }
         if (password) body.password = password
 
