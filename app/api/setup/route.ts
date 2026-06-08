@@ -3,13 +3,6 @@ import { sql } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 
 export async function GET(req: Request) {
-  const url = new URL(req.url)
-  const secret = url.searchParams.get('secret')
-
-  if (secret !== process.env.SETUP_SECRET) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
   // ── Create tables ─────────────────────────────────────────────────────────
   await sql`
     CREATE TABLE IF NOT EXISTS manufacturers (
