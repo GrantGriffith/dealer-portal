@@ -1,23 +1,9 @@
-import { cookies } from 'next/headers'
-import { getIronSession } from 'iron-session'
 import Link from 'next/link'
-import { adminSessionOptions, AdminSessionData } from '@/lib/session'
 import GriffithLogo from '@/components/GriffithLogo'
 
-export const dynamic = 'force-dynamic'
-
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await getIronSession<AdminSessionData>(cookies(), adminSessionOptions)
-
-  // Login page doesn't need the nav shell
-  // We only render the shell for authenticated admin pages
-  if (!session.adminId) {
-    return <>{children}</>
-  }
-
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col">
-      {/* Top nav */}
       <header className="bg-[#0f2044] text-white shadow">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -39,7 +25,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </div>
       </header>
-
       <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
         {children}
       </main>

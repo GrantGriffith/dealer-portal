@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless'
 
-const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? ''
+const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL ?? 'postgresql://placeholder/placeholder'
 export const sql = neon(connectionString)
 
 export interface Dealer {
