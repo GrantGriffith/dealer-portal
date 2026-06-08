@@ -1,10 +1,6 @@
 import { NextResponse } from 'next/server'
-import { sql } from '@vercel/postgres'
+import { sql } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-
-// One-time setup endpoint: creates tables + seeds manufacturers + creates admin
-// Call: GET /api/setup
-// Protect with a secret: add ?secret=YOUR_SETUP_SECRET to the URL
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -14,7 +10,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // ── Create tables ────────────────────────────────────────────────────────
+  // ── Create tables ─────────────────────────────────────────────────────────
   await sql`
     CREATE TABLE IF NOT EXISTS manufacturers (
       id SERIAL PRIMARY KEY,
@@ -57,29 +53,24 @@ export async function GET(req: Request) {
 
   // ── Seed manufacturers ────────────────────────────────────────────────────
   const manufacturers: [string, string][] = [
-    // Audio — Microphones
     ['Audix', 'Audio – Microphones'],
     ['Aston Microphones', 'Audio – Microphones'],
     ['Galaxy Audio', 'Audio – Microphones'],
     ['JTS', 'Audio – Microphones'],
-    // Audio — Signal Distribution & Control
     ['Symetrix', 'Audio – Signal Distribution'],
     ['Alfatron', 'Audio – Signal Distribution'],
     ['Midas', 'Audio – Signal Distribution'],
     ['Bluesound Professional', 'Audio – Signal Distribution'],
     ['Audac', 'Audio – Signal Distribution'],
-    // Audio — Amplifiers
     ['Powersoft', 'Audio – Amplifiers'],
     ['Lab.gruppen', 'Audio – Amplifiers'],
     ['Sonance', 'Audio – Amplifiers'],
     ['H.S.A.', 'Audio – Amplifiers'],
-    // Speakers — Production / Line Array
     ['Alcons Audio', 'Speakers – Production'],
     ['FBT', 'Speakers – Production'],
     ['Axiom', 'Speakers – Production'],
     ['Funktion-One', 'Speakers – Production'],
     ['Renkus-Heinz', 'Speakers – Production'],
-    // Speakers — HOW / Commercial
     ['Innovox Audio', 'Speakers – HOW / Commercial'],
     ['James Loudspeaker', 'Speakers – HOW / Commercial'],
     ['OWI', 'Speakers – HOW / Commercial'],
@@ -87,30 +78,25 @@ export async function GET(req: Request) {
     ['Proel', 'Speakers – HOW / Commercial'],
     ['Studiomaster', 'Speakers – HOW / Commercial'],
     ['Warfedale Pro', 'Speakers – HOW / Commercial'],
-    // Lighting — Fixtures
     ['Chauvet Professional', 'Lighting – Fixtures'],
     ['Chauvet DJ', 'Lighting – Fixtures'],
     ['KinoFlo', 'Lighting – Fixtures'],
     ['Iluminarc', 'Lighting – Fixtures'],
-    // Lighting — Control
     ['Chamsys', 'Lighting – Control'],
     ['Obey by Chauvet', 'Lighting – Control'],
     ['MediaMaster', 'Lighting – Control'],
     ['Trusst', 'Lighting – Control'],
-    // Video — Display
     ['Absen', 'Video – Display'],
     ['Alfatron PTZ Cameras', 'Video – Display'],
     ['Vivitek', 'Video – Display'],
     ['Chauvet Video', 'Video – Display'],
     ['Visionary Solutions', 'Video – Control'],
-    // Essentials
     ['FSR', 'Essentials'],
     ['Hollyland', 'Essentials'],
     ['Netgear', 'Essentials'],
     ['iPort', 'Essentials'],
     ['Audinate', 'Essentials'],
     ['Intec Direct Boxes', 'Essentials'],
-    // Power
     ['LynTec', 'Power'],
     ['Juice Goose', 'Power'],
     ['Work Pro', 'Power'],
@@ -118,23 +104,23 @@ export async function GET(req: Request) {
 
   let mfrSeeded = 0
   for (const [name, category] of manufacturers) {
-    const { rowCount } = await sql`
+    const result = await sql`
       INSERT INTO manufacturers (name, category)
       VALUES (${name}, ${category})
       ON CONFLICT DO NOTHING
     `
-    mfrSeeded += rowCount ?? 0
+    mfrSeeded += result.length
   }
 
-  // ── Create admin account ─────────────────────────────────────────────────
-  const adminEmail = process.env.ADMIN_EMAIL || 'grant@griffithsales.com'
+  // ── Create admin ──────────────────────────────────────────────────────────
+  const adminEmail    = process.env.ADMIN_EMAIL ?? 'grant@griffithsales.com'
   const adminPassword = process.env.ADMIN_PASSWORD
   if (!adminPassword) {
     return NextResponse.json({ error: 'ADMIN_PASSWORD env var not set.' }, { status: 500 })
   }
 
   const adminHash = await bcrypt.hash(adminPassword, 12)
-  const { rowCount: adminRows } = await sql`
+  await sql`
     INSERT INTO admins (email, password_hash)
     VALUES (${adminEmail}, ${adminHash})
     ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash
@@ -142,9 +128,8 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     success: true,
-    tables_created: ['manufacturers', 'dealers', 'dealer_manufacturers', 'admins'],
     manufacturers_seeded: mfrSeeded,
-    admin_created: adminRows ?? 0,
     admin_email: adminEmail,
+    message: 'Setup complete! You can now log in at /admin',
   })
 }
