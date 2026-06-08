@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Griffith Sales Associates – Dealer Portal',
   description: 'Authorized dealer portal for Griffith Sales Associates',
