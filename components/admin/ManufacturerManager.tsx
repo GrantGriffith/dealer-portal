@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Image from 'next/image'
+import { upload } from '@vercel/blob/client'
 
 interface Manufacturer {
   id: number
@@ -27,23 +28,30 @@ function MfrRow({
   const logoInputRef = useRef<HTMLInputElement>(null)
   const plInputRef = useRef<HTMLInputElement>(null)
 
-  async function upload(type: 'logo' | 'pricelist', file: File) {
+  async function handleUpload(type: 'logo' | 'pricelist', file: File) {
     setUploading(type)
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('type', type)
-    fd.append('manufacturerId', String(m.id))
-    const uploadRes = await fetch('/api/admin/upload', { method: 'POST', body: fd })
-    const { url } = await uploadRes.json()
+    try {
+      const folder = type === 'logo' ? 'logos' : 'pricelists'
+      const ext = file.name.split('.').pop()
+      const filename = `${folder}/manufacturer-${m.id}-${Date.now()}.${ext}`
 
-    const field = type === 'logo' ? 'logoUrl' : 'priceListUrl'
-    const patchRes = await fetch(`/api/admin/manufacturers/${m.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: url }),
-    })
-    const updated = await patchRes.json()
-    onUpdated(updated)
+      const blob = await upload(filename, file, {
+        access: 'public',
+        handleUploadUrl: '/api/admin/upload',
+      })
+
+      const field = type === 'logo' ? 'logoUrl' : 'priceListUrl'
+      const patchRes = await fetch(`/api/admin/manufacturers/${m.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: blob.url }),
+      })
+      const updated = await patchRes.json()
+      onUpdated(updated)
+    } catch (err) {
+      console.error('Upload error:', err)
+      alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)))
+    }
     setUploading(null)
   }
 
@@ -73,7 +81,7 @@ function MfrRow({
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={e => { if (e.target.files?.[0]) upload('logo', e.target.files[0]); e.target.value = '' }}
+          onChange={e => { if (e.target.files?.[0]) handleUpload('logo', e.target.files[0]); e.target.value = '' }}
         />
         <button
           onClick={() => logoInputRef.current?.click()}
@@ -89,7 +97,7 @@ function MfrRow({
           type="file"
           accept=".pdf,.xlsx,.xls,.csv"
           className="hidden"
-          onChange={e => { if (e.target.files?.[0]) upload('pricelist', e.target.files[0]); e.target.value = '' }}
+          onChange={e => { if (e.target.files?.[0]) handleUpload('pricelist', e.target.files[0]); e.target.value = '' }}
         />
         <button
           onClick={() => plInputRef.current?.click()}
