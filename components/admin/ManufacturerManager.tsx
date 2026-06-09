@@ -196,14 +196,17 @@ export default function ManufacturerManager({ manufacturers: initial }: { manufa
             onKeyDown={e => e.key === 'Enter' && addManufacturer()}
             className="flex-1 min-w-48 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
           />
-          <input
-            type="text" placeholder="Category (e.g. Audio – Amplifiers)"
+          <select
             value={newCategory} onChange={e => setNewCategory(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addManufacturer()}
-            className="flex-1 min-w-48 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
-          />
+            className="flex-1 min-w-48 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044] bg-white"
+          >
+            <option value="">— Select category —</option>
+            {Object.keys(grouped).sort().map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
           <button
-            onClick={addManufacturer} disabled={saving || !newName.trim()}
+            onClick={addManufacturer} disabled={saving || !newName.trim() || !newCategory}
             className="bg-[#0f2044] text-white px-5 py-2 rounded-lg text-sm hover:bg-[#1a3a6b] transition disabled:opacity-50"
           >
             {saving ? 'Adding…' : '+ Add'}
@@ -221,11 +224,15 @@ export default function ManufacturerManager({ manufacturers: initial }: { manufa
               placeholder="Name"
               className="flex-1 min-w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
             />
-            <input
+            <select
               value={editCat} onChange={e => setEditCat(e.target.value)}
-              placeholder="Category"
-              className="flex-1 min-w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
-            />
+              className="flex-1 min-w-40 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044] bg-white"
+            >
+              <option value="">— Select category —</option>
+              {Object.keys(grouped).sort().map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
             <button onClick={saveEdit} disabled={saving}
               className="bg-[#0f2044] text-white px-4 py-2 rounded-lg text-sm transition disabled:opacity-50">
               {saving ? '…' : 'Save'}
