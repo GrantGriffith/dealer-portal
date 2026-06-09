@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 interface Dealer {
   id: number
@@ -15,8 +16,11 @@ interface Dealer {
 }
 
 export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [activating, setActivating] = useState(false)
+  const [message, setMessage] = useState('')
 
   const filtered = dealers.filter(d => {
     const matchSearch =
@@ -29,6 +33,36 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
       (filter === 'inactive' && !d.is_active)
     return matchSearch && matchFilter
   })
+
+  const inactiveFiltered = filtered.filter(d => !d.is_active)
+
+  async function activateFiltered() {
+    if (inactiveFiltered.length === 0) return
+    setActivating(true)
+    setMessage('')
+
+    // If activating all dealers (no search, no filter restriction), use the fast all:true path
+    const activateAll = search === '' && (filter === 'all' || filter === 'inactive')
+      && inactiveFiltered.length === dealers.filter(d => !d.is_active).length
+
+    const body = activateAll
+      ? { all: true }
+      : { ids: inactiveFiltered.map(d => d.id) }
+
+    const res = await fetch('/api/admin/dealers/bulk-activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    setActivating(false)
+    if (data.activated !== undefined) {
+      setMessage(`✓ ${data.activated} dealers activated`)
+      router.refresh()
+    } else {
+      setMessage('Error activating dealers')
+    }
+  }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -56,11 +90,21 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
             </button>
           ))}
         </div>
+        {inactiveFiltered.length > 0 && (
+          <button
+            onClick={activateFiltered}
+            disabled={activating}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-60 whitespace-nowrap"
+          >
+            {activating ? 'Activating…' : `Activate ${inactiveFiltered.length === dealers.filter(d=>!d.is_active).length && search === '' ? 'All' : inactiveFiltered.length} Inactive`}
+          </button>
+        )}
       </div>
 
-      <p className="px-5 py-2 text-xs text-slate-400 border-b border-slate-100">
-        {filtered.length} of {dealers.length} dealers
-      </p>
+      <div className="px-5 py-2 border-b border-slate-100 flex items-center justify-between">
+        <p className="text-xs text-slate-400">{filtered.length} of {dealers.length} dealers</p>
+        {message && <p className="text-xs text-green-600 font-medium">{message}</p>}
+      </div>
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
