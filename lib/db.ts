@@ -1,14 +1,19 @@
-import { neon } from '@neondatabase/serverless'
+import postgres from 'postgres'
 
-// Use the direct (non-pooling) URL — Neon's HTTP driver requires a direct endpoint,
-// not the pgbouncer proxy that POSTGRES_URL points to.
 const connectionString =
-  process.env.POSTGRES_URL_NON_POOLING ??
   process.env.POSTGRES_URL ??
   process.env.DATABASE_URL ??
   'postgresql://placeholder/placeholder'
 
-export const sql = neon(connectionString)
+// max:1 keeps connection count low in serverless environments
+const sql = postgres(connectionString, {
+  ssl: 'require',
+  max: 1,
+  idle_timeout: 20,
+  connect_timeout: 10,
+})
+
+export { sql }
 
 export interface Dealer {
   id: number
