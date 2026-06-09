@@ -1,24 +1,19 @@
-// Griffith Sales Associates logo — concentric circles (target/sound waves)
+import Image from 'next/image'
+
 export default function GriffithLogo({
   size = 48,
-  color = '#0f2044',
 }: {
   size?: number
-  color?: string
+  color?: string // kept for compatibility, unused
 }) {
   return (
-    <svg
-      width={size}
+    <Image
+      src="/griffith_sales_logo.jpeg"
+      alt="Griffith Sales Associates"
+      width={size * 2}
       height={size}
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-label="Griffith Sales Associates"
-    >
-      <circle cx="50" cy="50" r="47" stroke={color} strokeWidth="5" />
-      <circle cx="50" cy="50" r="34" stroke={color} strokeWidth="5" />
-      <circle cx="50" cy="50" r="21" stroke={color} strokeWidth="5" />
-      <circle cx="50" cy="50" r="8"  fill={color} />
-    </svg>
+      className="object-contain"
+      priority
+    />
   )
 }
