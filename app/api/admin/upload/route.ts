@@ -1,53 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { getIronSession } from 'iron-session'
-import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { adminSessionOptions, AdminSessionData } from '@/lib/session'
 
 export const dynamic = 'force-dynamic'
 
-async function isAdmin(): Promise<boolean> {
+async function requireAdmin() {
   const session = await getIronSession<AdminSessionData>(cookies(), adminSessionOptions)
-  return !!session.adminId
+  return session.adminId ? session : null
 }
 
-// Called twice by @vercel/blob/client:
-// 1. type=blob.generate-client-token → returns a short-lived upload token
-// 2. type=blob.upload-completed → called by Vercel after upload finishes (webhook)
+const r2 = new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+  },
+})
+
 export async function POST(req: NextRequest) {
-  if (!await isAdmin()) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!await requireAdmin()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const formData = await req.formData()
+  const file = formData.get('file') as File | null
+  const type = formData.get('type') as string | null
+  const manufacturerId = formData.get('manufacturerId') as string | null
+
+  if (!file || !type || !manufacturerId) {
+    return NextResponse.json({ error: 'Missing file, type, or manufacturerId.' }, { status: 400 })
   }
 
-  const body = (await req.json()) as HandleUploadBody
+  const ext = file.name.split('.').pop()
+  const folder = type === 'logo' ? 'logos' : 'pricelists'
+  const key = `${folder}/manufacturer-${manufacturerId}-${Date.now()}.${ext}`
 
   try {
-    const jsonResponse = await handleUpload({
-      body,
-      request: req,
-      onBeforeGenerateToken: async (pathname, clientPayload) => {
-        return {
-          allowedContentTypes: [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-            'application/pdf',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'text/csv',
-          ],
-          tokenPayload: clientPayload ?? '',
-        }
-      },
-      onUploadCompleted: async () => {
-        // DB update is handled client-side after upload completes
-      },
-    })
+    const bytes = await file.arrayBuffer()
+    await r2.send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME ?? 'dealer-portal',
+      Key: key,
+      Body: Buffer.from(bytes),
+      ContentType: file.type,
+    }))
 
-    return NextResponse.json(jsonResponse)
+    const publicUrl = `${process.env.R2_PUBLIC_URL}/${key}`
+    return NextResponse.json({ url: publicUrl })
   } catch (err) {
-    console.error('Upload handler error:', err)
-    return NextResponse.json(
-      { error: 'Upload failed', details: err instanceof Error ? err.message : String(err) },
-      { status: 400 }
-    )
+    console.error('R2 upload error:', err)
+    return NextResponse.json({
+      error: 'Upload failed',
+      details: err instanceof Error ? err.message : String(err),
+    }, { status: 500 })
   }
 }
