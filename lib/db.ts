@@ -5,7 +5,6 @@ const connectionString =
   process.env.DATABASE_URL ??
   'postgresql://placeholder/placeholder'
 
-// max:1 keeps connection count low in serverless environments
 const sql = postgres(connectionString, {
   ssl: 'require',
   max: 1,
@@ -41,13 +40,15 @@ export interface Admin {
   password_hash: string
 }
 
+function cast<T>(rows: unknown): T { return rows as T }
+
 // ─── Dealers ─────────────────────────────────────────────────────────────────
 
 export async function getDealerByEmail(email: string): Promise<Dealer | null> {
   const rows = await sql`
     SELECT * FROM dealers WHERE LOWER(email) = LOWER(${email}) AND is_active = true LIMIT 1
   `
-  return (rows[0] as Dealer) ?? null
+  return cast<Dealer[]>(rows)[0] ?? null
 }
 
 export async function getAllDealers(): Promise<(Dealer & { manufacturer_count: number })[]> {
@@ -58,12 +59,12 @@ export async function getAllDealers(): Promise<(Dealer & { manufacturer_count: n
     GROUP BY d.id
     ORDER BY d.company, d.last_name, d.first_name
   `
-  return rows as (Dealer & { manufacturer_count: number })[]
+  return cast<(Dealer & { manufacturer_count: number })[]>(rows)
 }
 
 export async function getDealerById(id: number): Promise<Dealer | null> {
   const rows = await sql`SELECT * FROM dealers WHERE id = ${id} LIMIT 1`
-  return (rows[0] as Dealer) ?? null
+  return cast<Dealer[]>(rows)[0] ?? null
 }
 
 export async function createDealer(
@@ -76,7 +77,7 @@ export async function createDealer(
     ON CONFLICT (email) DO NOTHING
     RETURNING *
   `
-  return (rows[0] as Dealer) ?? null
+  return cast<Dealer[]>(rows)[0] ?? null
 }
 
 export async function updateDealer(
@@ -94,7 +95,7 @@ export async function updateDealer(
     UPDATE dealers SET first_name=${fn}, last_name=${ln}, company=${co}, is_active=${ia}, password_hash=${ph}
     WHERE id=${id} RETURNING *
   `
-  return (rows[0] as Dealer) ?? null
+  return cast<Dealer[]>(rows)[0] ?? null
 }
 
 export async function deleteDealer(id: number): Promise<void> {
@@ -105,12 +106,12 @@ export async function deleteDealer(id: number): Promise<void> {
 
 export async function getAllManufacturers(): Promise<Manufacturer[]> {
   const rows = await sql`SELECT * FROM manufacturers ORDER BY category, name`
-  return rows as Manufacturer[]
+  return cast<Manufacturer[]>(rows)
 }
 
 export async function getManufacturerById(id: number): Promise<Manufacturer | null> {
   const rows = await sql`SELECT * FROM manufacturers WHERE id = ${id} LIMIT 1`
-  return (rows[0] as Manufacturer) ?? null
+  return cast<Manufacturer[]>(rows)[0] ?? null
 }
 
 export async function createManufacturer(
@@ -121,7 +122,7 @@ export async function createManufacturer(
     VALUES (${name}, ${category}, ${logoUrl ?? null}, ${priceListUrl ?? null})
     RETURNING *
   `
-  return rows[0] as Manufacturer
+  return cast<Manufacturer[]>(rows)[0]
 }
 
 export async function updateManufacturer(
@@ -138,7 +139,7 @@ export async function updateManufacturer(
     UPDATE manufacturers SET name=${name}, category=${cat}, logo_url=${logoUrl}, price_list_url=${plUrl}
     WHERE id=${id} RETURNING *
   `
-  return (rows[0] as Manufacturer) ?? null
+  return cast<Manufacturer[]>(rows)[0] ?? null
 }
 
 export async function deleteManufacturer(id: number): Promise<void> {
@@ -154,7 +155,7 @@ export async function getDealerManufacturers(dealerId: number): Promise<Manufact
     WHERE dm.dealer_id = ${dealerId}
     ORDER BY m.category, m.name
   `
-  return rows as Manufacturer[]
+  return cast<Manufacturer[]>(rows)
 }
 
 export async function setDealerManufacturers(dealerId: number, manufacturerIds: number[]): Promise<void> {
@@ -168,5 +169,5 @@ export async function setDealerManufacturers(dealerId: number, manufacturerIds: 
 
 export async function getAdminByEmail(email: string): Promise<Admin | null> {
   const rows = await sql`SELECT * FROM admins WHERE LOWER(email) = LOWER(${email}) LIMIT 1`
-  return (rows[0] as Admin) ?? null
+  return cast<Admin[]>(rows)[0] ?? null
 }

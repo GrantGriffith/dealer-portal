@@ -65,11 +65,12 @@ export async function GET() {
     }
 
     const after_insert = await sql`SELECT COUNT(*)::int AS count FROM manufacturers`
+    const c = (r: unknown) => (r as { count: number }[]).at(0)?.count ?? 0
     return NextResponse.json({
-      version: 3,
-      before_delete: (before[0] as { count: number }).count,
-      after_delete: (after_delete[0] as { count: number }).count,
-      after_insert: (after_insert[0] as { count: number }).count,
+      version: 4,
+      before_delete: c(before),
+      after_delete: c(after_delete),
+      after_insert: c(after_insert),
       seed_list_length: manufacturers.length,
     })
   } catch (err) {

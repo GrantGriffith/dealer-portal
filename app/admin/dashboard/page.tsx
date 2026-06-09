@@ -21,7 +21,7 @@ async function getRecentDealers() {
     SELECT id, first_name, last_name, company, email, is_active, created_at
     FROM dealers ORDER BY created_at DESC LIMIT 10
   `
-  return rows as {
+  return rows as unknown as {
     id: number; first_name: string; last_name: string;
     company: string; email: string; is_active: boolean; created_at: string
   }[]
