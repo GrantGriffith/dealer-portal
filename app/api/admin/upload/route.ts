@@ -25,10 +25,19 @@ export async function POST(req: NextRequest) {
   const folder = type === 'logo' ? 'logos' : 'pricelists'
   const filename = `${folder}/manufacturer-${manufacturerId}-${Date.now()}.${ext}`
 
-  const blob = await put(filename, file, {
-    access: 'public',
-    contentType: file.type,
-  })
+  let blob
+  try {
+    blob = await put(filename, file, {
+      access: 'public',
+      contentType: file.type,
+    })
+  } catch (uploadErr) {
+    console.error('Blob upload error:', uploadErr)
+    return NextResponse.json({
+      error: 'Blob upload failed',
+      details: uploadErr instanceof Error ? uploadErr.message : String(uploadErr),
+    }, { status: 500 })
+  }
 
   return NextResponse.json({ url: blob.url })
 }
