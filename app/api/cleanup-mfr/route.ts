@@ -55,19 +55,22 @@ const manufacturers: [string, string][] = [
 
 export async function GET() {
   try {
-    // Remove all manufacturer assignments and manufacturers, then re-seed clean
+    const before = await sql`SELECT COUNT(*)::int AS count FROM manufacturers`
     await sql`DELETE FROM dealer_manufacturers`
     await sql`DELETE FROM manufacturers`
-    await sql`ALTER SEQUENCE manufacturers_id_seq RESTART WITH 1`
+    const after_delete = await sql`SELECT COUNT(*)::int AS count FROM manufacturers`
 
     for (const [name, category] of manufacturers) {
       await sql`INSERT INTO manufacturers (name, category) VALUES (${name}, ${category})`
     }
 
-    const rows = await sql`SELECT COUNT(*)::int AS count FROM manufacturers`
+    const after_insert = await sql`SELECT COUNT(*)::int AS count FROM manufacturers`
     return NextResponse.json({
-      success: true,
-      manufacturers: (rows[0] as { count: number }).count,
+      version: 3,
+      before_delete: (before[0] as { count: number }).count,
+      after_delete: (after_delete[0] as { count: number }).count,
+      after_insert: (after_insert[0] as { count: number }).count,
+      seed_list_length: manufacturers.length,
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
