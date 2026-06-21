@@ -4,6 +4,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+const ADMINS = ['Grant', 'Richard', 'Scott'] as const
+type AdminName = typeof ADMINS[number]
+
 interface Dealer {
   id: number
   first_name: string
@@ -11,6 +14,7 @@ interface Dealer {
   email: string
   company: string
   is_active: boolean
+  assigned_to: string | null
   manufacturer_count: number
   created_at: string
 }
@@ -18,7 +22,8 @@ interface Dealer {
 export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [adminFilter, setAdminFilter] = useState<'all' | AdminName>('all')
   const [activating, setActivating] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -27,11 +32,13 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
       `${d.first_name} ${d.last_name} ${d.email} ${d.company}`
         .toLowerCase()
         .includes(search.toLowerCase())
-    const matchFilter =
-      filter === 'all' ||
-      (filter === 'active' && d.is_active) ||
-      (filter === 'inactive' && !d.is_active)
-    return matchSearch && matchFilter
+    const matchStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'active' && d.is_active) ||
+      (statusFilter === 'inactive' && !d.is_active)
+    const matchAdmin =
+      adminFilter === 'all' || (d.assigned_to ?? 'Grant') === adminFilter
+    return matchSearch && matchStatus && matchAdmin
   })
 
   const inactiveFiltered = filtered.filter(d => !d.is_active)
@@ -41,8 +48,7 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
     setActivating(true)
     setMessage('')
 
-    // If activating all dealers (no search, no filter restriction), use the fast all:true path
-    const activateAll = search === '' && (filter === 'all' || filter === 'inactive')
+    const activateAll = search === '' && statusFilter !== 'active' && adminFilter === 'all'
       && inactiveFiltered.length === dealers.filter(d => !d.is_active).length
 
     const body = activateAll
@@ -64,41 +70,77 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
     }
   }
 
+  // Per-admin counts
+  const counts: Record<string, number> = { all: dealers.length }
+  for (const a of ADMINS) {
+    counts[a] = dealers.filter(d => (d.assigned_to ?? 'Grant') === a).length
+  }
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Toolbar */}
-      <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row gap-3">
-        <input
-          type="search"
-          placeholder="Search by name, email, or company…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
-        />
+      <div className="px-5 py-4 border-b border-slate-100 flex flex-col gap-3">
+        {/* Admin tabs */}
         <div className="flex gap-2 text-sm">
-          {(['all', 'active', 'inactive'] as const).map(f => (
+          <button
+            onClick={() => setAdminFilter('all')}
+            className={`px-3 py-1.5 rounded-lg transition ${
+              adminFilter === 'all'
+                ? 'bg-[#0f2044] text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            All <span className="ml-1 text-xs opacity-70">({counts.all})</span>
+          </button>
+          {ADMINS.map(a => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-lg capitalize transition ${
-                filter === f
+              key={a}
+              onClick={() => setAdminFilter(a)}
+              className={`px-3 py-1.5 rounded-lg transition ${
+                adminFilter === a
                   ? 'bg-[#0f2044] text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {f}
+              {a} <span className="ml-1 text-xs opacity-70">({counts[a]})</span>
             </button>
           ))}
         </div>
-        {inactiveFiltered.length > 0 && (
-          <button
-            onClick={activateFiltered}
-            disabled={activating}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-60 whitespace-nowrap"
-          >
-            {activating ? 'Activating…' : `Activate ${inactiveFiltered.length === dealers.filter(d=>!d.is_active).length && search === '' ? 'All' : inactiveFiltered.length} Inactive`}
-          </button>
-        )}
+
+        {/* Search + status filter */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="search"
+            placeholder="Search by name, email, or company…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
+          />
+          <div className="flex gap-2 text-sm">
+            {(['all', 'active', 'inactive'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setStatusFilter(f)}
+                className={`px-3 py-1.5 rounded-lg capitalize transition ${
+                  statusFilter === f
+                    ? 'bg-slate-700 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          {inactiveFiltered.length > 0 && (
+            <button
+              onClick={activateFiltered}
+              disabled={activating}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-60 whitespace-nowrap"
+            >
+              {activating ? 'Activating…' : `Activate ${inactiveFiltered.length} Inactive`}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="px-5 py-2 border-b border-slate-100 flex items-center justify-between">
@@ -113,7 +155,8 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
               <th className="px-5 py-3 text-left">Name</th>
               <th className="px-5 py-3 text-left">Company</th>
               <th className="px-5 py-3 text-left">Email</th>
-              <th className="px-5 py-3 text-left">Manufacturers</th>
+              <th className="px-5 py-3 text-left">Rep</th>
+              <th className="px-5 py-3 text-left">Mfrs</th>
               <th className="px-5 py-3 text-left">Status</th>
               <th className="px-5 py-3 text-left"></th>
             </tr>
@@ -126,6 +169,11 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
                 </td>
                 <td className="px-5 py-3 text-slate-600 whitespace-nowrap">{d.company || '—'}</td>
                 <td className="px-5 py-3 text-slate-500">{d.email}</td>
+                <td className="px-5 py-3">
+                  <span className="inline-block px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium">
+                    {d.assigned_to ?? 'Grant'}
+                  </span>
+                </td>
                 <td className="px-5 py-3 text-center">
                   <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">
                     {d.manufacturer_count}
@@ -152,7 +200,7 @@ export default function DealerTable({ dealers }: { dealers: Dealer[] }) {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-5 py-10 text-center text-slate-400">
+                <td colSpan={7} className="px-5 py-10 text-center text-slate-400">
                   No dealers found.
                 </td>
               </tr>

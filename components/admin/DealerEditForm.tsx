@@ -23,6 +23,7 @@ interface Dealer {
   email: string
   company: string
   is_active: boolean
+  assigned_to: string | null
 }
 
 interface Props {
@@ -43,6 +44,7 @@ export default function DealerEditForm({
   const [email, setEmail] = useState(dealer?.email ?? '')
   const [company, setCompany] = useState(dealer?.company ?? '')
   const [isActive, setIsActive] = useState(dealer?.is_active ?? false)
+  const [assignedTo, setAssignedTo] = useState(dealer?.assigned_to ?? 'Grant')
   const [password, setPassword] = useState('')
   const [selectedMfrs, setSelectedMfrs] = useState<Set<number>>(new Set(authorizedIds))
   // manufacturerId → tierId (null = no tier / no selection)
@@ -120,7 +122,7 @@ export default function DealerEditForm({
         const res = await fetch('/api/admin/dealers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ firstName, lastName, email, company, password, isActive }),
+          body: JSON.stringify({ firstName, lastName, email, company, password, isActive, assignedTo }),
         })
         const data = await res.json()
         if (!res.ok) { setError(data.error || 'Failed to create dealer.'); setSaving(false); return }
@@ -137,7 +139,7 @@ export default function DealerEditForm({
         router.push(`/admin/dealers/${data.id}`)
       } else {
         const body: Record<string, unknown> = {
-          firstName, lastName, company, isActive, manufacturerAssignments,
+          firstName, lastName, company, isActive, assignedTo, manufacturerAssignments,
         }
         if (password) body.password = password
 
@@ -202,6 +204,18 @@ export default function DealerEditForm({
                 placeholder={isNew ? 'Required' : '••••••••'}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Assigned Rep</label>
+              <select
+                value={assignedTo}
+                onChange={e => setAssignedTo(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044] bg-white"
+              >
+                <option>Grant</option>
+                <option>Richard</option>
+                <option>Scott</option>
+              </select>
             </div>
             <div className="flex items-center gap-3 pt-1">
               <input

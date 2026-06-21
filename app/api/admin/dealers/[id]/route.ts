@@ -31,10 +31,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const body = await req.json()
 
   const updates: Record<string, unknown> = {}
-  if (body.firstName !== undefined)  updates.first_name = body.firstName
-  if (body.lastName !== undefined)   updates.last_name = body.lastName
-  if (body.company !== undefined)    updates.company = body.company
-  if (body.isActive !== undefined)   updates.is_active = body.isActive
+  if (body.firstName !== undefined)   updates.first_name = body.firstName
+  if (body.lastName !== undefined)    updates.last_name = body.lastName
+  if (body.company !== undefined)     updates.company = body.company
+  if (body.isActive !== undefined)    updates.is_active = body.isActive
+  if ('assignedTo' in body)           updates.assigned_to = body.assignedTo ?? null
   if (body.password) {
     updates.password_hash = await bcrypt.hash(body.password, 12)
   }

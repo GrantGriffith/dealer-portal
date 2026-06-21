@@ -22,6 +22,7 @@ export interface Dealer {
   company: string
   password_hash: string
   is_active: boolean
+  assigned_to: string | null
   created_at: string
 }
 
@@ -89,7 +90,7 @@ export async function createDealer(
 
 export async function updateDealer(
   id: number,
-  fields: { first_name?: string; last_name?: string; company?: string; is_active?: boolean; password_hash?: string }
+  fields: { first_name?: string; last_name?: string; company?: string; is_active?: boolean; password_hash?: string; assigned_to?: string | null }
 ): Promise<Dealer | null> {
   const current = await getDealerById(id)
   if (!current) return null
@@ -98,8 +99,9 @@ export async function updateDealer(
   const co = fields.company       ?? current.company
   const ia = fields.is_active     ?? current.is_active
   const ph = fields.password_hash ?? current.password_hash
+  const at = 'assigned_to' in fields ? fields.assigned_to : current.assigned_to
   const rows = await sql`
-    UPDATE dealers SET first_name=${fn}, last_name=${ln}, company=${co}, is_active=${ia}, password_hash=${ph}
+    UPDATE dealers SET first_name=${fn}, last_name=${ln}, company=${co}, is_active=${ia}, password_hash=${ph}, assigned_to=${at ?? null}
     WHERE id=${id} RETURNING *
   `
   return cast<Dealer[]>(rows)[0] ?? null
