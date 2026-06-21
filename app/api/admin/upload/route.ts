@@ -32,9 +32,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing file, type, or manufacturerId.' }, { status: 400 })
   }
 
+  const tierId = formData.get('tierId') as string | null
   const ext = file.name.split('.').pop()
   const folder = type === 'logo' ? 'logos' : 'pricelists'
-  const key = `${folder}/manufacturer-${manufacturerId}-${Date.now()}.${ext}`
+  const key = tierId
+    ? `${folder}/manufacturer-${manufacturerId}-tier-${tierId}-${Date.now()}.${ext}`
+    : `${folder}/manufacturer-${manufacturerId}-${Date.now()}.${ext}`
 
   try {
     const bytes = await file.arrayBuffer()

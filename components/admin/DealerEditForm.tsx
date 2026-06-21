@@ -9,6 +9,13 @@ interface Manufacturer {
   category: string
 }
 
+interface Tier {
+  id: number
+  manufacturer_id: number
+  tier_name: string
+  sort_order: number
+}
+
 interface Dealer {
   id: number
   first_name: string
@@ -22,10 +29,14 @@ interface Props {
   dealer: Dealer | null
   allManufacturers: Manufacturer[]
   authorizedIds: number[]
+  tierAssignments: Record<number, number>   // manufacturerId → tierId
+  tiersMap: Record<number, Tier[]>          // manufacturerId → tiers[]
   isNew: boolean
 }
 
-export default function DealerEditForm({ dealer, allManufacturers, authorizedIds, isNew }: Props) {
+export default function DealerEditForm({
+  dealer, allManufacturers, authorizedIds, tierAssignments, tiersMap, isNew,
+}: Props) {
   const router = useRouter()
   const [firstName, setFirstName] = useState(dealer?.first_name ?? '')
   const [lastName, setLastName] = useState(dealer?.last_name ?? '')
@@ -34,6 +45,16 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
   const [isActive, setIsActive] = useState(dealer?.is_active ?? false)
   const [password, setPassword] = useState('')
   const [selectedMfrs, setSelectedMfrs] = useState<Set<number>>(new Set(authorizedIds))
+  // manufacturerId → tierId (null = no tier / no selection)
+  const [selectedTiers, setSelectedTiers] = useState<Record<number, number | null>>(
+    () => {
+      const init: Record<number, number | null> = {}
+      for (const [mfrId, tierId] of Object.entries(tierAssignments)) {
+        init[Number(mfrId)] = tierId
+      }
+      return init
+    }
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -50,8 +71,13 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
   function toggleMfr(id: number) {
     setSelectedMfrs(prev => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+        // Clear tier when unchecking
+        setSelectedTiers(t => { const n = { ...t }; delete n[id]; return n })
+      } else {
+        next.add(id)
+      }
       return next
     })
   }
@@ -61,16 +87,32 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
     const allSelected = catIds.every(id => selectedMfrs.has(id))
     setSelectedMfrs(prev => {
       const next = new Set(prev)
-      if (allSelected) catIds.forEach(id => next.delete(id))
-      else catIds.forEach(id => next.add(id))
+      if (allSelected) {
+        catIds.forEach(id => {
+          next.delete(id)
+          setSelectedTiers(t => { const n = { ...t }; delete n[id]; return n })
+        })
+      } else {
+        catIds.forEach(id => next.add(id))
+      }
       return next
     })
+  }
+
+  function setTier(mfrId: number, tierId: number | null) {
+    setSelectedTiers(prev => ({ ...prev, [mfrId]: tierId }))
   }
 
   async function handleSave() {
     setError('')
     setSuccess('')
     setSaving(true)
+
+    // Build assignments array
+    const manufacturerAssignments = Array.from(selectedMfrs).map(mfrId => ({
+      manufacturerId: mfrId,
+      tierId: selectedTiers[mfrId] ?? null,
+    }))
 
     try {
       if (isNew) {
@@ -83,12 +125,11 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
         const data = await res.json()
         if (!res.ok) { setError(data.error || 'Failed to create dealer.'); setSaving(false); return }
 
-        // Now assign manufacturers
-        if (selectedMfrs.size > 0) {
+        if (manufacturerAssignments.length > 0) {
           await fetch(`/api/admin/dealers/${data.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ manufacturerIds: Array.from(selectedMfrs) }),
+            body: JSON.stringify({ manufacturerAssignments }),
           })
         }
 
@@ -96,8 +137,7 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
         router.push(`/admin/dealers/${data.id}`)
       } else {
         const body: Record<string, unknown> = {
-          firstName, lastName, company, isActive,
-          manufacturerIds: Array.from(selectedMfrs),
+          firstName, lastName, company, isActive, manufacturerAssignments,
         }
         if (password) body.password = password
 
@@ -217,7 +257,7 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
                 className="text-[#0f2044] hover:underline"
               >Select All</button>
               <span className="text-slate-300">|</span>
-              <button onClick={() => setSelectedMfrs(new Set())} className="text-slate-500 hover:underline">
+              <button onClick={() => { setSelectedMfrs(new Set()); setSelectedTiers({}) }} className="text-slate-500 hover:underline">
                 Clear
               </button>
             </div>
@@ -242,20 +282,42 @@ export default function DealerEditForm({ dealer, allManufacturers, authorizedIds
                     }`} />
                     {cat}
                   </button>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {mfrs.map(m => (
-                      <label key={m.id} className="flex items-center gap-2 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={selectedMfrs.has(m.id)}
-                          onChange={() => toggleMfr(m.id)}
-                          className="h-4 w-4 accent-[#0f2044] flex-shrink-0"
-                        />
-                        <span className="text-sm text-slate-700 group-hover:text-slate-900 leading-tight">
-                          {m.name}
-                        </span>
-                      </label>
-                    ))}
+                  <div className="space-y-2">
+                    {mfrs.map(m => {
+                      const tiers = tiersMap[m.id] ?? []
+                      const hasTiers = tiers.length > 0
+                      const isChecked = selectedMfrs.has(m.id)
+
+                      return (
+                        <div key={m.id} className="flex items-center gap-3 flex-wrap">
+                          <label className="flex items-center gap-2 cursor-pointer group min-w-[160px]">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleMfr(m.id)}
+                              className="h-4 w-4 accent-[#0f2044] flex-shrink-0"
+                            />
+                            <span className="text-sm text-slate-700 group-hover:text-slate-900 leading-tight">
+                              {m.name}
+                            </span>
+                          </label>
+                          {hasTiers && isChecked && (
+                            <select
+                              value={selectedTiers[m.id] ?? ''}
+                              onChange={e => setTier(m.id, e.target.value ? Number(e.target.value) : null)}
+                              className="text-xs border border-slate-200 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[#0f2044] text-slate-700 bg-slate-50"
+                            >
+                              <option value="">— select tier —</option>
+                              {tiers
+                                .sort((a, b) => a.sort_order - b.sort_order)
+                                .map(t => (
+                                  <option key={t.id} value={t.id}>{t.tier_name}</option>
+                                ))}
+                            </select>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )

@@ -98,8 +98,17 @@ export default async function DashboardPage() {
 function ManufacturerCard({
   manufacturer,
 }: {
-  manufacturer: { id: number; name: string; logo_url: string | null; price_list_url: string | null }
+  manufacturer: {
+    id: number
+    name: string
+    logo_url: string | null
+    price_list_url: string | null
+    tier_price_list_url: string | null
+  }
 }) {
+  // Tier-specific URL takes priority over the manufacturer's general URL
+  const downloadUrl = manufacturer.tier_price_list_url ?? manufacturer.price_list_url
+
   const content = (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 overflow-hidden group cursor-pointer">
       {/* Logo area */}
@@ -123,7 +132,7 @@ function ManufacturerCard({
       {/* Name + download indicator */}
       <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 text-center">
         <p className="text-xs font-medium text-slate-700 truncate">{manufacturer.name}</p>
-        {manufacturer.price_list_url ? (
+        {downloadUrl ? (
           <p className="text-xs text-[#0f2044] mt-0.5 group-hover:underline">↓ Price List</p>
         ) : (
           <p className="text-xs text-slate-400 mt-0.5">No file yet</p>
@@ -132,10 +141,10 @@ function ManufacturerCard({
     </div>
   )
 
-  if (manufacturer.price_list_url) {
+  if (downloadUrl) {
     return (
       <a
-        href={manufacturer.price_list_url}
+        href={downloadUrl}
         target="_blank"
         rel="noopener noreferrer"
         download

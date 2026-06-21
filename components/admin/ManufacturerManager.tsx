@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 
 interface Manufacturer {
@@ -11,7 +11,153 @@ interface Manufacturer {
   price_list_url: string | null
 }
 
-// Each manufacturer row has its own upload buttons with isolated file inputs
+interface Tier {
+  id: number
+  manufacturer_id: number
+  tier_name: string
+  price_list_url: string | null
+  sort_order: number
+}
+
+// ── Tier panel (lazy-loaded when opened) ──────────────────────────────────────
+function TierPanel({ mfr }: { mfr: Manufacturer }) {
+  const [tiers, setTiers] = useState<Tier[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [newTierName, setNewTierName] = useState('')
+  const [addingTier, setAddingTier] = useState(false)
+  const [uploadingTierId, setUploadingTierId] = useState<number | null>(null)
+  const tierInputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/admin/manufacturers/${mfr.id}/tiers`)
+      .then(r => r.json())
+      .then(data => { setTiers(data); setLoading(false) })
+      .catch(() => { setTiers([]); setLoading(false) })
+  }, [mfr.id])
+
+  async function addTier() {
+    if (!newTierName.trim()) return
+    setAddingTier(true)
+    const res = await fetch(`/api/admin/manufacturers/${mfr.id}/tiers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tierName: newTierName.trim(), sortOrder: (tiers?.length ?? 0) }),
+    })
+    const newTier = await res.json()
+    setTiers(prev => [...(prev ?? []), newTier])
+    setNewTierName('')
+    setAddingTier(false)
+  }
+
+  async function deleteTier(tierId: number) {
+    if (!confirm('Delete this tier? Dealers assigned to it will lose access to this tier\'s price list.')) return
+    await fetch(`/api/admin/manufacturers/${mfr.id}/tiers`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tierId }),
+    })
+    setTiers(prev => (prev ?? []).filter(t => t.id !== tierId))
+  }
+
+  async function uploadTierPriceList(tier: Tier, file: File) {
+    setUploadingTierId(tier.id)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('type', 'pricelist')
+      fd.append('manufacturerId', String(mfr.id))
+      fd.append('tierId', String(tier.id))
+      const uploadRes = await fetch('/api/admin/upload', { method: 'POST', body: fd })
+      const data = await uploadRes.json()
+      if (!uploadRes.ok) throw new Error(data.details || data.error || 'Upload failed')
+
+      const patchRes = await fetch(`/api/admin/manufacturers/${mfr.id}/tiers`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tierId: tier.id, priceListUrl: data.url }),
+      })
+      const updated = await patchRes.json()
+      setTiers(prev => (prev ?? []).map(t => t.id === updated.id ? updated : t))
+    } catch (err) {
+      alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)))
+    }
+    setUploadingTierId(null)
+  }
+
+  if (loading) return <p className="text-xs text-slate-400 py-2 px-3">Loading tiers…</p>
+
+  const sorted = [...(tiers ?? [])].sort((a, b) => a.sort_order - b.sort_order)
+
+  return (
+    <div className="bg-slate-50 border-t border-slate-100 px-5 py-4 space-y-3">
+      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">Pricing Tiers</p>
+
+      {sorted.length === 0 && (
+        <p className="text-xs text-slate-400">No tiers yet. Add one below.</p>
+      )}
+
+      {sorted.map(tier => (
+        <div key={tier.id} className="flex items-center gap-3 flex-wrap bg-white border border-slate-200 rounded-lg px-3 py-2">
+          <span className="text-sm font-medium text-slate-700 flex-1 min-w-[120px]">{tier.tier_name}</span>
+
+          {/* Hidden file input per tier */}
+          <input
+            type="file"
+            accept=".pdf,.xlsx,.xls,.csv"
+            className="hidden"
+            ref={el => { tierInputRefs.current[tier.id] = el }}
+            onChange={e => {
+              if (e.target.files?.[0]) uploadTierPriceList(tier, e.target.files[0])
+              e.target.value = ''
+            }}
+          />
+          <button
+            onClick={() => tierInputRefs.current[tier.id]?.click()}
+            disabled={uploadingTierId === tier.id}
+            className={`text-xs border px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${
+              tier.price_list_url
+                ? 'border-green-200 text-green-700 bg-green-50 hover:bg-green-100'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {uploadingTierId === tier.id
+              ? 'Uploading…'
+              : tier.price_list_url ? '✓ Price List' : '📄 Upload Price List'}
+          </button>
+
+          <button
+            onClick={() => deleteTier(tier.id)}
+            className="text-xs text-red-500 hover:underline"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+
+      {/* Add tier */}
+      <div className="flex gap-2 mt-2">
+        <input
+          type="text"
+          placeholder="New tier name (e.g. Gold)"
+          value={newTierName}
+          onChange={e => setNewTierName(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addTier()}
+          className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0f2044]"
+        />
+        <button
+          onClick={addTier}
+          disabled={addingTier || !newTierName.trim()}
+          className="bg-[#0f2044] text-white px-4 py-1.5 rounded-lg text-sm hover:bg-[#1a3a6b] transition disabled:opacity-50"
+        >
+          {addingTier ? '…' : '+ Add Tier'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── MfrRow ────────────────────────────────────────────────────────────────────
 function MfrRow({
   m,
   onEditing,
@@ -24,6 +170,7 @@ function MfrRow({
   onUpdated: (mfr: Manufacturer) => void
 }) {
   const [uploading, setUploading] = useState<'logo' | 'pricelist' | null>(null)
+  const [showTiers, setShowTiers] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
   const plInputRef = useRef<HTMLInputElement>(null)
 
@@ -54,72 +201,89 @@ function MfrRow({
   }
 
   return (
-    <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
-      {/* Logo preview */}
-      <div className="w-16 h-12 flex-shrink-0 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-center overflow-hidden">
-        {m.logo_url ? (
-          <Image src={m.logo_url} alt={m.name} width={64} height={48} className="object-contain" unoptimized />
-        ) : (
-          <span className="text-xs text-slate-400 text-center px-1 leading-tight">{m.name}</span>
-        )}
+    <div>
+      <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
+        {/* Logo preview */}
+        <div className="w-16 h-12 flex-shrink-0 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-center overflow-hidden">
+          {m.logo_url ? (
+            <Image src={m.logo_url} alt={m.name} width={64} height={48} className="object-contain" unoptimized />
+          ) : (
+            <span className="text-xs text-slate-400 text-center px-1 leading-tight">{m.name}</span>
+          )}
+        </div>
+
+        {/* Name */}
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-slate-800 text-sm">{m.name}</p>
+          <p className="text-xs text-slate-400">{m.category}</p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+
+          {/* Logo upload */}
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => { if (e.target.files?.[0]) handleUpload('logo', e.target.files[0]); e.target.value='' }}
+          />
+          <button
+            onClick={() => logoInputRef.current?.click()}
+            disabled={!!uploading}
+            className="text-xs border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+          >
+            {uploading === 'logo' ? 'Uploading…' : m.logo_url ? '✓ Logo' : '📷 Logo'}
+          </button>
+
+          {/* Price list upload (fallback / non-tiered) */}
+          <input
+            ref={plInputRef}
+            type="file"
+            accept=".pdf,.xlsx,.xls,.csv"
+            className="hidden"
+            onChange={e => { if (e.target.files?.[0]) handleUpload('pricelist', e.target.files[0]); e.target.value='' }}
+          />
+          <button
+            onClick={() => plInputRef.current?.click()}
+            disabled={!!uploading}
+            className={`text-xs border px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${
+              m.price_list_url
+                ? 'border-green-200 text-green-700 bg-green-50 hover:bg-green-100'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            {uploading === 'pricelist' ? 'Uploading…' : m.price_list_url ? '✓ Price List' : '📄 Price List'}
+          </button>
+
+          {/* Tiers toggle */}
+          <button
+            onClick={() => setShowTiers(v => !v)}
+            className={`text-xs border px-3 py-1.5 rounded-lg transition ${
+              showTiers
+                ? 'bg-[#0f2044] text-white border-[#0f2044]'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            Tiers
+          </button>
+
+          <button onClick={() => onEditing(m)} className="text-xs text-[#0f2044] hover:underline px-1">
+            Edit
+          </button>
+          <button onClick={() => onDelete(m.id)} className="text-xs text-red-500 hover:underline px-1">
+            Delete
+          </button>
+        </div>
       </div>
 
-      {/* Name */}
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-slate-800 text-sm">{m.name}</p>
-        <p className="text-xs text-slate-400">{m.category}</p>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
-
-        {/* Logo upload */}
-        <input
-          ref={logoInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={e => { if (e.target.files?.[0]) handleUpload('logo', e.target.files[0]); e.target.value='' }}
-        />
-        <button
-          onClick={() => logoInputRef.current?.click()}
-          disabled={!!uploading}
-          className="text-xs border border-slate-200 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
-        >
-          {uploading === 'logo' ? 'Uploading…' : m.logo_url ? '✓ Logo' : '📷 Logo'}
-        </button>
-
-        {/* Price list upload */}
-        <input
-          ref={plInputRef}
-          type="file"
-          accept=".pdf,.xlsx,.xls,.csv"
-          className="hidden"
-          onChange={e => { if (e.target.files?.[0]) handleUpload('pricelist', e.target.files[0]); e.target.value='' }}
-        />
-        <button
-          onClick={() => plInputRef.current?.click()}
-          disabled={!!uploading}
-          className={`text-xs border px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${
-            m.price_list_url
-              ? 'border-green-200 text-green-700 bg-green-50 hover:bg-green-100'
-              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          {uploading === 'pricelist' ? 'Uploading…' : m.price_list_url ? '✓ Price List' : '📄 Price List'}
-        </button>
-
-        <button onClick={() => onEditing(m)} className="text-xs text-[#0f2044] hover:underline px-1">
-          Edit
-        </button>
-        <button onClick={() => onDelete(m.id)} className="text-xs text-red-500 hover:underline px-1">
-          Delete
-        </button>
-      </div>
+      {showTiers && <TierPanel mfr={m} />}
     </div>
   )
 }
 
+// ── ManufacturerManager ───────────────────────────────────────────────────────
 export default function ManufacturerManager({ manufacturers: initial }: { manufacturers: Manufacturer[] }) {
   const [mfrs, setMfrs] = useState<Manufacturer[]>(initial)
   const [editing, setEditing] = useState<Manufacturer | null>(null)

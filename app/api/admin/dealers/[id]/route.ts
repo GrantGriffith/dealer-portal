@@ -42,8 +42,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const updated = await updateDealer(id, updates as Parameters<typeof updateDealer>[1])
 
   // Update manufacturer access if provided
-  if (Array.isArray(body.manufacturerIds)) {
-    await setDealerManufacturers(id, body.manufacturerIds.map(Number))
+  if (Array.isArray(body.manufacturerAssignments)) {
+    await setDealerManufacturers(id, body.manufacturerAssignments.map((a: { manufacturerId: number; tierId?: number | null }) => ({
+      manufacturerId: Number(a.manufacturerId),
+      tierId: a.tierId ? Number(a.tierId) : null,
+    })))
+  } else if (Array.isArray(body.manufacturerIds)) {
+    // Legacy support
+    await setDealerManufacturers(id, body.manufacturerIds.map((mid: number) => ({ manufacturerId: Number(mid) })))
   }
 
   return NextResponse.json(updated)

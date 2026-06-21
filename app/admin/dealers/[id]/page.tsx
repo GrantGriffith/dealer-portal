@@ -1,4 +1,4 @@
-import { getDealerById, getDealerManufacturers, getAllManufacturers } from '@/lib/db'
+import { getDealerById, getDealerManufacturerIds, getDealerTierAssignments, getAllManufacturers, getTiersForManufacturers } from '@/lib/db'
 import { notFound } from 'next/navigation'
 import DealerEditForm from '@/components/admin/DealerEditForm'
 
@@ -8,15 +8,18 @@ export default async function EditDealerPage({ params }: { params: { id: string 
   const isNew = params.id === 'new'
   const id = isNew ? null : parseInt(params.id)
 
-  const [dealer, authorizedMfrs, allMfrs] = await Promise.all([
+  const [dealer, authorizedIds, tierAssignments, allMfrs] = await Promise.all([
     id ? getDealerById(id) : null,
-    id ? getDealerManufacturers(id) : [],
+    id ? getDealerManufacturerIds(id) : [],
+    id ? getDealerTierAssignments(id) : {},
     getAllManufacturers(),
   ])
 
   if (!isNew && !dealer) notFound()
 
-  const authorizedIds = authorizedMfrs.map(m => m.id)
+  // Get tiers for all manufacturers that have them
+  const allMfrIds = allMfrs.map(m => m.id)
+  const tiersMap = await getTiersForManufacturers(allMfrIds)
 
   return (
     <div>
@@ -27,6 +30,8 @@ export default async function EditDealerPage({ params }: { params: { id: string 
         dealer={dealer ?? null}
         allManufacturers={allMfrs}
         authorizedIds={authorizedIds}
+        tierAssignments={tierAssignments}
+        tiersMap={tiersMap}
         isNew={isNew}
       />
     </div>

@@ -31,7 +31,14 @@ export interface Manufacturer {
   category: string
   logo_url: string | null
   price_list_url: string | null
-  created_at: string
+}
+
+export interface ManufacturerTier {
+  id: number
+  manufacturer_id: number
+  tier_name: string
+  price_list_url: string | null
+  sort_order: number
 }
 
 export interface Admin {
@@ -146,22 +153,105 @@ export async function deleteManufacturer(id: number): Promise<void> {
   await sql`DELETE FROM manufacturers WHERE id = ${id}`
 }
 
+// ─── Manufacturer Tiers ───────────────────────────────────────────────────────
+
+export async function getTiersForManufacturer(manufacturerId: number): Promise<ManufacturerTier[]> {
+  const rows = await sql`
+    SELECT * FROM manufacturer_tiers WHERE manufacturer_id = ${manufacturerId} ORDER BY sort_order, tier_name
+  `
+  return cast<ManufacturerTier[]>(rows)
+}
+
+export async function getTiersForManufacturers(manufacturerIds: number[]): Promise<Record<number, ManufacturerTier[]>> {
+  if (manufacturerIds.length === 0) return {}
+  const rows = await sql`
+    SELECT * FROM manufacturer_tiers WHERE manufacturer_id = ANY(${manufacturerIds}) ORDER BY sort_order, tier_name
+  `
+  const tiers = cast<ManufacturerTier[]>(rows)
+  const grouped: Record<number, ManufacturerTier[]> = {}
+  for (const t of tiers) {
+    if (!grouped[t.manufacturer_id]) grouped[t.manufacturer_id] = []
+    grouped[t.manufacturer_id].push(t)
+  }
+  return grouped
+}
+
+export async function createTier(manufacturerId: number, tierName: string, sortOrder = 0): Promise<ManufacturerTier> {
+  const rows = await sql`
+    INSERT INTO manufacturer_tiers (manufacturer_id, tier_name, sort_order)
+    VALUES (${manufacturerId}, ${tierName}, ${sortOrder})
+    RETURNING *
+  `
+  return cast<ManufacturerTier[]>(rows)[0]
+}
+
+export async function updateTier(
+  id: number,
+  fields: { tier_name?: string; price_list_url?: string | null; sort_order?: number }
+): Promise<ManufacturerTier | null> {
+  const rows = await sql`SELECT * FROM manufacturer_tiers WHERE id = ${id} LIMIT 1`
+  const current = cast<ManufacturerTier[]>(rows)[0]
+  if (!current) return null
+  const name   = fields.tier_name      !== undefined ? fields.tier_name      : current.tier_name
+  const plUrl  = fields.price_list_url !== undefined ? fields.price_list_url : current.price_list_url
+  const order  = fields.sort_order     !== undefined ? fields.sort_order     : current.sort_order
+  const updated = await sql`
+    UPDATE manufacturer_tiers SET tier_name=${name}, price_list_url=${plUrl}, sort_order=${order}
+    WHERE id=${id} RETURNING *
+  `
+  return cast<ManufacturerTier[]>(updated)[0] ?? null
+}
+
+export async function deleteTier(id: number): Promise<void> {
+  await sql`DELETE FROM manufacturer_tiers WHERE id = ${id}`
+}
+
 // ─── Dealer ↔ Manufacturer ────────────────────────────────────────────────────
 
-export async function getDealerManufacturers(dealerId: number): Promise<Manufacturer[]> {
+// Returns manufacturers with their assigned tier info for a dealer
+export async function getDealerManufacturers(dealerId: number): Promise<(Manufacturer & { tier_id: number | null; tier_price_list_url: string | null })[]> {
   const rows = await sql`
-    SELECT m.* FROM manufacturers m
+    SELECT m.*, dm.tier_id,
+           mt.price_list_url AS tier_price_list_url
+    FROM manufacturers m
     JOIN dealer_manufacturers dm ON dm.manufacturer_id = m.id
+    LEFT JOIN manufacturer_tiers mt ON mt.id = dm.tier_id
     WHERE dm.dealer_id = ${dealerId}
     ORDER BY m.category, m.name
   `
-  return cast<Manufacturer[]>(rows)
+  return cast<(Manufacturer & { tier_id: number | null; tier_price_list_url: string | null })[]>(rows)
 }
 
-export async function setDealerManufacturers(dealerId: number, manufacturerIds: number[]): Promise<void> {
+// Returns just the manufacturer IDs a dealer is assigned to
+export async function getDealerManufacturerIds(dealerId: number): Promise<number[]> {
+  const rows = await sql`SELECT manufacturer_id FROM dealer_manufacturers WHERE dealer_id = ${dealerId}`
+  return cast<{ manufacturer_id: number }[]>(rows).map(r => r.manufacturer_id)
+}
+
+// Returns tier assignments: manufacturerId -> tierId
+export async function getDealerTierAssignments(dealerId: number): Promise<Record<number, number>> {
+  const rows = await sql`
+    SELECT manufacturer_id, tier_id FROM dealer_manufacturers
+    WHERE dealer_id = ${dealerId} AND tier_id IS NOT NULL
+  `
+  const map: Record<number, number> = {}
+  for (const r of cast<{ manufacturer_id: number; tier_id: number }[]>(rows)) {
+    map[r.manufacturer_id] = r.tier_id
+  }
+  return map
+}
+
+export async function setDealerManufacturers(
+  dealerId: number,
+  assignments: { manufacturerId: number; tierId?: number | null }[]
+): Promise<void> {
   await sql`DELETE FROM dealer_manufacturers WHERE dealer_id = ${dealerId}`
-  for (const mId of manufacturerIds) {
-    await sql`INSERT INTO dealer_manufacturers (dealer_id, manufacturer_id) VALUES (${dealerId}, ${mId}) ON CONFLICT DO NOTHING`
+  for (const { manufacturerId, tierId } of assignments) {
+    await sql`
+      INSERT INTO dealer_manufacturers (dealer_id, manufacturer_id, tier_id)
+      VALUES (${dealerId}, ${manufacturerId}, ${tierId ?? null})
+      ON CONFLICT DO NOTHING
+    `
   }
 }
 
