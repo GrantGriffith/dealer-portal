@@ -105,6 +105,33 @@ export default function DealerEditForm({
     setSelectedTiers(prev => ({ ...prev, [mfrId]: tierId }))
   }
 
+  const [copying, setCopying] = useState(false)
+
+  async function handleCopyToCompany() {
+    const companyName = company.trim()
+    if (!companyName || !dealer) return
+    if (!confirm(`Copy these exact line assignments to ALL other dealers at "${companyName}"? This will overwrite their current assignments.`)) return
+
+    setCopying(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await fetch('/api/admin/dealers/copy-to-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dealerId: dealer.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Failed to copy.'); setCopying(false); return }
+      setSuccess(data.updated === 0
+        ? 'No other dealers found at this company.'
+        : `✓ Applied to ${data.updated} other dealer${data.updated === 1 ? '' : 's'} at "${data.company}"`)
+    } catch {
+      setError('Network error.')
+    }
+    setCopying(false)
+  }
+
   async function handleSave() {
     setError('')
     setSuccess('')
@@ -240,6 +267,15 @@ export default function DealerEditForm({
           >
             {saving ? 'Saving…' : isNew ? 'Create Dealer' : 'Save Changes'}
           </button>
+          {!isNew && company.trim() && (
+            <button
+              onClick={handleCopyToCompany}
+              disabled={copying}
+              className="w-full bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 py-2.5 rounded-lg text-sm transition disabled:opacity-60"
+            >
+              {copying ? 'Applying…' : `Apply lines to all at "${company.trim()}"`}
+            </button>
+          )}
           {!isNew && (
             <button
               onClick={handleDelete}
