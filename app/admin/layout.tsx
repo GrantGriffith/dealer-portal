@@ -19,6 +19,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link href="/admin/dashboard" className="hover:text-blue-300 transition">Dashboard</Link>
             <Link href="/admin/dealers"   className="hover:text-blue-300 transition">Dealers</Link>
             <Link href="/admin/manufacturers" className="hover:text-blue-300 transition">Manufacturers</Link>
+            <Link href="/admin/downloads"    className="hover:text-blue-300 transition">Downloads</Link>
             <form action="/api/auth/admin-logout" method="POST" className="ml-2">
               <button className="text-xs bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-1.5 rounded-lg transition">
                 Sign Out

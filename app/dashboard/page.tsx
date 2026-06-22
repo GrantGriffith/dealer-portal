@@ -144,10 +144,9 @@ function ManufacturerCard({
   if (downloadUrl) {
     return (
       <a
-        href={downloadUrl}
+        href={`/api/download/${manufacturer.id}`}
         target="_blank"
         rel="noopener noreferrer"
-        download
         title={`Download ${manufacturer.name} price list`}
       >
         {content}
