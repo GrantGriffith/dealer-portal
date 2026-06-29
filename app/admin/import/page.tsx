@@ -15,47 +15,56 @@ function parseCSV(text: string): { dealers: ParsedDealer[]; errors: string[] } {
   const dealers: ParsedDealer[] = []
   const errors: string[] = []
 
-  // Detect if first line is a header
-  const first = lines[0].toLowerCase()
-  const hasHeader = first.includes('email') || first.includes('first') || first.includes('name')
+  if (lines.length === 0) return { dealers, errors }
+
+  // Detect separator from first line
+  const sep = lines[0].includes('\t') ? '\t' : ','
+  const clean = (s: string) => s.trim().replace(/^["']|["']$/g, '').trim()
+
+  // Check if first row is a header
+  const firstCols = lines[0].split(sep).map(c => c.toLowerCase().trim().replace(/^["']|["']$/g, ''))
+  const hasHeader = firstCols.some(c =>
+    c.includes('email') || c.includes('first') || c.includes('last') ||
+    c.includes('name') || c.includes('org') || c.includes('company')
+  )
+
+  // Build column index map from header
+  let colMap: Record<string, number> = {}
+  if (hasHeader) {
+    firstCols.forEach((col, i) => {
+      if (col.includes('email'))                          colMap.email = i
+      else if (col.includes('first'))                     colMap.firstName = i
+      else if (col.includes('last'))                      colMap.lastName = i
+      else if (col.includes('org') || col.includes('company') || col.includes('account')) colMap.company = i
+    })
+  }
+
   const dataLines = hasHeader ? lines.slice(1) : lines
 
   for (let i = 0; i < dataLines.length; i++) {
-    const line = dataLines[i]
-    // Support comma or tab delimited
-    const sep = line.includes('\t') ? '\t' : ','
-    const cols = line.split(sep).map(c => c.trim().replace(/^["']|["']$/g, ''))
+    const cols = dataLines[i].split(sep).map(clean)
+    if (cols.length < 2 || cols.every(c => !c)) continue
 
-    if (cols.length < 2) {
-      errors.push(`Row ${i + 1}: not enough columns (need at least firstName, email)`)
-      continue
-    }
-
-    // Try to detect column order: firstName, lastName, email, company
-    // OR: email, firstName, lastName, company
     let firstName = '', lastName = '', email = '', company = ''
 
-    if (cols[0].includes('@')) {
-      // email first
-      email = cols[0]
-      firstName = cols[1] || ''
-      lastName = cols[2] || ''
-      company = cols[3] || ''
+    if (hasHeader && Object.keys(colMap).length > 0) {
+      // Use header-based mapping
+      email     = colMap.email     !== undefined ? cols[colMap.email]     ?? '' : ''
+      firstName = colMap.firstName !== undefined ? cols[colMap.firstName] ?? '' : ''
+      lastName  = colMap.lastName  !== undefined ? cols[colMap.lastName]  ?? '' : ''
+      company   = colMap.company   !== undefined ? cols[colMap.company]   ?? '' : ''
     } else {
-      firstName = cols[0]
-      lastName = cols[1] || ''
-      // Check if col[2] is email or col[1]
-      if (cols[2]?.includes('@')) {
-        email = cols[2]
-        company = cols[3] || ''
-      } else if (cols[1]?.includes('@')) {
-        email = cols[1]
-        lastName = ''
-        company = cols[2] || ''
-      } else {
+      // Fallback: find email by @ sign, rest by position
+      const emailIdx = cols.findIndex(c => c.includes('@'))
+      if (emailIdx === -1) {
         errors.push(`Row ${i + 1}: could not find email address`)
         continue
       }
+      email = cols[emailIdx]
+      const rest = cols.filter((_, idx) => idx !== emailIdx)
+      firstName = rest[0] || ''
+      lastName  = rest[1] || ''
+      company   = rest[2] || ''
     }
 
     if (!email.includes('@')) {
@@ -117,7 +126,7 @@ export default function ImportPage() {
     <div className="max-w-3xl">
       <h1 className="text-2xl font-bold text-slate-800 mb-2">Import Dealers</h1>
       <p className="text-slate-500 text-sm mb-6">
-        Paste CSV data below. Columns: <code className="bg-slate-100 px-1 rounded text-xs">firstName, lastName, email, company</code> (header row optional).
+        Paste CSV data below. Any column order works as long as you include a header row. Recognized headers: <code className="bg-slate-100 px-1 rounded text-xs">Organization</code>, <code className="bg-slate-100 px-1 rounded text-xs">First Name</code>, <code className="bg-slate-100 px-1 rounded text-xs">Last Name</code>, <code className="bg-slate-100 px-1 rounded text-xs">Email</code>.
       </p>
 
       <div className="space-y-5">
@@ -127,7 +136,7 @@ export default function ImportPage() {
           <textarea
             value={csvText}
             onChange={e => { setCsvText(e.target.value); setPreview(null); setResult(null) }}
-            placeholder={`firstName,lastName,email,company\nJane,Smith,jane@acme.com,Acme Audio\nBob,Jones,bob@demo.com,Demo AV`}
+            placeholder={`Organization,First Name,Last Name,email\nCamcor,Ted,Smith,ted@camcor.com\nCamcor,Jane,Doe,jane@camcor.com`}
             rows={8}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#0f2044] resize-y"
           />
