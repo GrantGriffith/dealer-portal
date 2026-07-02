@@ -27,10 +27,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
 export async function PATCH(req: NextRequest, _ctx: { params: { id: string } }) {
   if (!await requireAdmin()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { tierId, priceListUrl, tierName, sortOrder } = await req.json()
+  const { tierId, priceListUrl, priceListEffectiveDate, tierName, sortOrder } = await req.json()
   const updated = await updateTier(tierId, {
     ...(tierName !== undefined && { tier_name: tierName }),
     ...(priceListUrl !== undefined && { price_list_url: priceListUrl }),
+    ...(priceListEffectiveDate !== undefined && { price_list_effective_date: priceListEffectiveDate }),
     ...(sortOrder !== undefined && { sort_order: sortOrder }),
   })
   return NextResponse.json(updated)

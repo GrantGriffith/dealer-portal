@@ -3,12 +3,25 @@
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 
+function currentMonthValue() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function formatEffectiveDate(dateStr: string | null) {
+  if (!dateStr) return null
+  const [year, month] = dateStr.split('-')
+  return new Date(Number(year), Number(month) - 1, 1)
+    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
 interface Manufacturer {
   id: number
   name: string
   category: string
   logo_url: string | null
   price_list_url: string | null
+  price_list_effective_date: string | null
 }
 
 interface Tier {
@@ -16,6 +29,7 @@ interface Tier {
   manufacturer_id: number
   tier_name: string
   price_list_url: string | null
+  price_list_effective_date: string | null
   sort_order: number
 }
 
@@ -60,6 +74,9 @@ function TierPanel({ mfr }: { mfr: Manufacturer }) {
     setTiers(prev => (prev ?? []).filter(t => t.id !== tierId))
   }
 
+  const [editingDateTierId, setEditingDateTierId] = useState<number | null>(null)
+  const [dateOverride, setDateOverride] = useState('')
+
   async function uploadTierPriceList(tier: Tier, file: File) {
     setUploadingTierId(tier.id)
     try {
@@ -72,10 +89,12 @@ function TierPanel({ mfr }: { mfr: Manufacturer }) {
       const data = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(data.details || data.error || 'Upload failed')
 
+      // Auto-date to current month
+      const effectiveDate = currentMonthValue() + '-01'
       const patchRes = await fetch(`/api/admin/manufacturers/${mfr.id}/tiers`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tierId: tier.id, priceListUrl: data.url }),
+        body: JSON.stringify({ tierId: tier.id, priceListUrl: data.url, priceListEffectiveDate: effectiveDate }),
       })
       const updated = await patchRes.json()
       setTiers(prev => (prev ?? []).map(t => t.id === updated.id ? updated : t))
@@ -83,6 +102,19 @@ function TierPanel({ mfr }: { mfr: Manufacturer }) {
       alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)))
     }
     setUploadingTierId(null)
+  }
+
+  async function saveDateOverride(tierId: number) {
+    if (!dateOverride) return
+    const effectiveDate = dateOverride + '-01'
+    const res = await fetch(`/api/admin/manufacturers/${mfr.id}/tiers`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tierId, priceListEffectiveDate: effectiveDate }),
+    })
+    const updated = await res.json()
+    setTiers(prev => (prev ?? []).map(t => t.id === updated.id ? updated : t))
+    setEditingDateTierId(null)
   }
 
   if (loading) return <p className="text-xs text-slate-400 py-2 px-3">Loading tiers…</p>
@@ -98,40 +130,67 @@ function TierPanel({ mfr }: { mfr: Manufacturer }) {
       )}
 
       {sorted.map(tier => (
-        <div key={tier.id} className="flex items-center gap-3 flex-wrap bg-white border border-slate-200 rounded-lg px-3 py-2">
-          <span className="text-sm font-medium text-slate-700 flex-1 min-w-[120px]">{tier.tier_name}</span>
+        <div key={tier.id} className="bg-white border border-slate-200 rounded-lg px-3 py-2 space-y-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-sm font-medium text-slate-700 flex-1 min-w-[120px]">{tier.tier_name}</span>
 
-          {/* Hidden file input per tier */}
-          <input
-            type="file"
-            accept=".pdf,.xlsx,.xls,.csv"
-            className="hidden"
-            ref={el => { tierInputRefs.current[tier.id] = el }}
-            onChange={e => {
-              if (e.target.files?.[0]) uploadTierPriceList(tier, e.target.files[0])
-              e.target.value = ''
-            }}
-          />
-          <button
-            onClick={() => tierInputRefs.current[tier.id]?.click()}
-            disabled={uploadingTierId === tier.id}
-            className={`text-xs border px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${
-              tier.price_list_url
-                ? 'border-green-200 text-green-700 bg-green-50 hover:bg-green-100'
-                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            {uploadingTierId === tier.id
-              ? 'Uploading…'
-              : tier.price_list_url ? '✓ Price List' : '📄 Upload Price List'}
-          </button>
+            {/* Hidden file input per tier */}
+            <input
+              type="file"
+              accept=".pdf,.xlsx,.xls,.csv"
+              className="hidden"
+              ref={el => { tierInputRefs.current[tier.id] = el }}
+              onChange={e => {
+                if (e.target.files?.[0]) uploadTierPriceList(tier, e.target.files[0])
+                e.target.value = ''
+              }}
+            />
+            <button
+              onClick={() => tierInputRefs.current[tier.id]?.click()}
+              disabled={uploadingTierId === tier.id}
+              className={`text-xs border px-3 py-1.5 rounded-lg transition disabled:opacity-50 ${
+                tier.price_list_url
+                  ? 'border-green-200 text-green-700 bg-green-50 hover:bg-green-100'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {uploadingTierId === tier.id
+                ? 'Uploading…'
+                : tier.price_list_url ? '✓ Price List' : '📄 Upload Price List'}
+            </button>
 
-          <button
-            onClick={() => deleteTier(tier.id)}
-            className="text-xs text-red-500 hover:underline"
-          >
-            Remove
-          </button>
+            <button onClick={() => deleteTier(tier.id)} className="text-xs text-red-500 hover:underline">
+              Remove
+            </button>
+          </div>
+
+          {/* Effective date */}
+          {tier.price_list_url && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 pl-0.5">
+              {editingDateTierId === tier.id ? (
+                <>
+                  <input
+                    type="month"
+                    defaultValue={tier.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()}
+                    onChange={e => setDateOverride(e.target.value)}
+                    className="border border-slate-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0f2044]"
+                  />
+                  <button onClick={() => saveDateOverride(tier.id)} className="text-[#0f2044] hover:underline">Save</button>
+                  <button onClick={() => setEditingDateTierId(null)} className="text-slate-400 hover:underline">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span>{tier.price_list_effective_date ? `Effective ${formatEffectiveDate(tier.price_list_effective_date)}` : 'No date set'}</span>
+                  <button
+                    onClick={() => { setEditingDateTierId(tier.id); setDateOverride(tier.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()) }}
+                    className="text-slate-400 hover:text-[#0f2044] underline"
+                  >
+                    change
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
       ))}
 
@@ -171,6 +230,8 @@ function MfrRow({
 }) {
   const [uploading, setUploading] = useState<'logo' | 'pricelist' | null>(null)
   const [showTiers, setShowTiers] = useState(false)
+  const [editingDate, setEditingDate] = useState(false)
+  const [dateOverride, setDateOverride] = useState('')
   const logoInputRef = useRef<HTMLInputElement>(null)
   const plInputRef = useRef<HTMLInputElement>(null)
 
@@ -185,11 +246,14 @@ function MfrRow({
       const data = await uploadRes.json()
       if (!uploadRes.ok) throw new Error(data.details || data.error || 'Upload failed')
 
-      const field = type === 'logo' ? 'logoUrl' : 'priceListUrl'
+      const patch: Record<string, string> = type === 'logo'
+        ? { logoUrl: data.url }
+        : { priceListUrl: data.url, priceListEffectiveDate: currentMonthValue() + '-01' }
+
       const patchRes = await fetch(`/api/admin/manufacturers/${m.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: data.url }),
+        body: JSON.stringify(patch),
       })
       const updated = await patchRes.json()
       onUpdated(updated)
@@ -200,8 +264,20 @@ function MfrRow({
     setUploading(null)
   }
 
+  async function saveDateOverride() {
+    if (!dateOverride) return
+    const res = await fetch(`/api/admin/manufacturers/${m.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ priceListEffectiveDate: dateOverride + '-01' }),
+    })
+    const updated = await res.json()
+    onUpdated(updated)
+    setEditingDate(false)
+  }
+
   return (
-    <div>
+    <div className="divide-y divide-slate-50">
       <div className="px-5 py-4 flex items-center gap-4 flex-wrap">
         {/* Logo preview */}
         <div className="w-16 h-12 flex-shrink-0 bg-slate-50 border border-slate-100 rounded-lg flex items-center justify-center overflow-hidden">
@@ -256,6 +332,30 @@ function MfrRow({
           >
             {uploading === 'pricelist' ? 'Uploading…' : m.price_list_url ? '✓ Price List' : '📄 Price List'}
           </button>
+
+          {/* Effective date (for non-tiered price lists) */}
+          {m.price_list_url && !showTiers && (
+            editingDate ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="month"
+                  defaultValue={m.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()}
+                  onChange={e => setDateOverride(e.target.value)}
+                  className="border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#0f2044]"
+                />
+                <button onClick={saveDateOverride} className="text-xs text-[#0f2044] hover:underline">Save</button>
+                <button onClick={() => setEditingDate(false)} className="text-xs text-slate-400 hover:underline">✕</button>
+              </div>
+            ) : (
+              <span className="text-xs text-slate-400">
+                {m.price_list_effective_date ? formatEffectiveDate(m.price_list_effective_date) : 'No date'}
+                {' · '}
+                <button onClick={() => { setEditingDate(true); setDateOverride(m.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()) }} className="hover:text-[#0f2044] underline">
+                  change
+                </button>
+              </span>
+            )
+          )}
 
           {/* Tiers toggle */}
           <button

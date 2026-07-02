@@ -95,6 +95,13 @@ export default async function DashboardPage() {
   )
 }
 
+function formatEffectiveDate(dateStr: string | null) {
+  if (!dateStr) return null
+  const [year, month] = dateStr.split('-')
+  return new Date(Number(year), Number(month) - 1, 1)
+    .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
 function ManufacturerCard({
   manufacturer,
 }: {
@@ -103,11 +110,14 @@ function ManufacturerCard({
     name: string
     logo_url: string | null
     price_list_url: string | null
+    price_list_effective_date: string | null
     tier_price_list_url: string | null
+    tier_price_list_effective_date: string | null
   }
 }) {
-  // Tier-specific URL takes priority over the manufacturer's general URL
+  // Tier-specific values take priority over manufacturer defaults
   const downloadUrl = manufacturer.tier_price_list_url ?? manufacturer.price_list_url
+  const effectiveDate = manufacturer.tier_price_list_effective_date ?? manufacturer.price_list_effective_date
 
   const content = (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 overflow-hidden group cursor-pointer">
@@ -133,7 +143,12 @@ function ManufacturerCard({
       <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 text-center">
         <p className="text-xs font-medium text-slate-700 truncate">{manufacturer.name}</p>
         {downloadUrl ? (
-          <p className="text-xs text-[#0f2044] mt-0.5 group-hover:underline">↓ Price List</p>
+          <>
+            <p className="text-xs text-[#0f2044] mt-0.5 group-hover:underline">↓ Price List</p>
+            {effectiveDate && (
+              <p className="text-xs text-slate-400 mt-0.5">Effective {formatEffectiveDate(effectiveDate)}</p>
+            )}
+          </>
         ) : (
           <p className="text-xs text-slate-400 mt-0.5">No file yet</p>
         )}

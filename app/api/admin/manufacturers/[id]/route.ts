@@ -13,13 +13,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!await requireAdmin()) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const id = parseInt(params.id)
-  const { name, category, logoUrl, priceListUrl } = await req.json()
+  const { name, category, logoUrl, priceListUrl, priceListEffectiveDate } = await req.json()
 
   const updated = await updateManufacturer(id, {
     ...(name !== undefined && { name }),
     ...(category !== undefined && { category }),
     ...(logoUrl !== undefined && { logo_url: logoUrl }),
     ...(priceListUrl !== undefined && { price_list_url: priceListUrl }),
+    ...(priceListEffectiveDate !== undefined && { price_list_effective_date: priceListEffectiveDate }),
   })
 
   return NextResponse.json(updated)

@@ -32,6 +32,7 @@ export interface Manufacturer {
   category: string
   logo_url: string | null
   price_list_url: string | null
+  price_list_effective_date: string | null
 }
 
 export interface ManufacturerTier {
@@ -39,6 +40,7 @@ export interface ManufacturerTier {
   manufacturer_id: number
   tier_name: string
   price_list_url: string | null
+  price_list_effective_date: string | null
   sort_order: number
 }
 
@@ -136,7 +138,7 @@ export async function createManufacturer(
 
 export async function updateManufacturer(
   id: number,
-  fields: { name?: string; category?: string; logo_url?: string | null; price_list_url?: string | null }
+  fields: { name?: string; category?: string; logo_url?: string | null; price_list_url?: string | null; price_list_effective_date?: string | null }
 ): Promise<Manufacturer | null> {
   const current = await getManufacturerById(id)
   if (!current) return null
@@ -144,8 +146,9 @@ export async function updateManufacturer(
   const cat     = fields.category       !== undefined ? fields.category       : current.category
   const logoUrl = fields.logo_url       !== undefined ? fields.logo_url       : current.logo_url
   const plUrl   = fields.price_list_url !== undefined ? fields.price_list_url : current.price_list_url
+  const plDate  = fields.price_list_effective_date !== undefined ? fields.price_list_effective_date : current.price_list_effective_date
   const rows = await sql`
-    UPDATE manufacturers SET name=${name}, category=${cat}, logo_url=${logoUrl}, price_list_url=${plUrl}
+    UPDATE manufacturers SET name=${name}, category=${cat}, logo_url=${logoUrl}, price_list_url=${plUrl}, price_list_effective_date=${plDate}
     WHERE id=${id} RETURNING *
   `
   return cast<Manufacturer[]>(rows)[0] ?? null
@@ -189,16 +192,17 @@ export async function createTier(manufacturerId: number, tierName: string, sortO
 
 export async function updateTier(
   id: number,
-  fields: { tier_name?: string; price_list_url?: string | null; sort_order?: number }
+  fields: { tier_name?: string; price_list_url?: string | null; price_list_effective_date?: string | null; sort_order?: number }
 ): Promise<ManufacturerTier | null> {
   const rows = await sql`SELECT * FROM manufacturer_tiers WHERE id = ${id} LIMIT 1`
   const current = cast<ManufacturerTier[]>(rows)[0]
   if (!current) return null
   const name   = fields.tier_name      !== undefined ? fields.tier_name      : current.tier_name
   const plUrl  = fields.price_list_url !== undefined ? fields.price_list_url : current.price_list_url
+  const plDate = fields.price_list_effective_date !== undefined ? fields.price_list_effective_date : current.price_list_effective_date
   const order  = fields.sort_order     !== undefined ? fields.sort_order     : current.sort_order
   const updated = await sql`
-    UPDATE manufacturer_tiers SET tier_name=${name}, price_list_url=${plUrl}, sort_order=${order}
+    UPDATE manufacturer_tiers SET tier_name=${name}, price_list_url=${plUrl}, price_list_effective_date=${plDate}, sort_order=${order}
     WHERE id=${id} RETURNING *
   `
   return cast<ManufacturerTier[]>(updated)[0] ?? null
@@ -211,17 +215,18 @@ export async function deleteTier(id: number): Promise<void> {
 // ─── Dealer ↔ Manufacturer ────────────────────────────────────────────────────
 
 // Returns manufacturers with their assigned tier info for a dealer
-export async function getDealerManufacturers(dealerId: number): Promise<(Manufacturer & { tier_id: number | null; tier_price_list_url: string | null })[]> {
+export async function getDealerManufacturers(dealerId: number): Promise<(Manufacturer & { tier_id: number | null; tier_price_list_url: string | null; tier_price_list_effective_date: string | null })[]> {
   const rows = await sql`
     SELECT m.*, dm.tier_id,
-           mt.price_list_url AS tier_price_list_url
+           mt.price_list_url AS tier_price_list_url,
+           mt.price_list_effective_date AS tier_price_list_effective_date
     FROM manufacturers m
     JOIN dealer_manufacturers dm ON dm.manufacturer_id = m.id
     LEFT JOIN manufacturer_tiers mt ON mt.id = dm.tier_id
     WHERE dm.dealer_id = ${dealerId}
     ORDER BY m.category, m.name
   `
-  return cast<(Manufacturer & { tier_id: number | null; tier_price_list_url: string | null })[]>(rows)
+  return cast<(Manufacturer & { tier_id: number | null; tier_price_list_url: string | null; tier_price_list_effective_date: string | null })[]>(rows)
 }
 
 // Returns just the manufacturer IDs a dealer is assigned to
