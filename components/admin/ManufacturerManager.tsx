@@ -8,7 +8,14 @@ function currentMonthValue() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-function formatEffectiveDate(dateStr: string | null) {
+function toDateStr(val: unknown): string | null {
+  if (!val) return null
+  if (val instanceof Date) return val.toISOString().slice(0, 10)
+  return String(val).slice(0, 10)
+}
+
+function formatEffectiveDate(val: unknown): string | null {
+  const dateStr = toDateStr(val)
   if (!dateStr) return null
   const [year, month] = dateStr.split('-')
   return new Date(Number(year), Number(month) - 1, 1)
@@ -171,7 +178,7 @@ function TierPanel({ mfr }: { mfr: Manufacturer }) {
                 <>
                   <input
                     type="month"
-                    defaultValue={tier.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()}
+                    defaultValue={toDateStr(tier.price_list_effective_date) ?? currentMonthValue()}
                     onChange={e => setDateOverride(e.target.value)}
                     className="border border-slate-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#0f2044]"
                   />
@@ -182,7 +189,7 @@ function TierPanel({ mfr }: { mfr: Manufacturer }) {
                 <>
                   <span>{tier.price_list_effective_date ? `Effective ${formatEffectiveDate(tier.price_list_effective_date)}` : 'No date set'}</span>
                   <button
-                    onClick={() => { setEditingDateTierId(tier.id); setDateOverride(tier.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()) }}
+                    onClick={() => { setEditingDateTierId(tier.id); setDateOverride(toDateStr(tier.price_list_effective_date) ?? currentMonthValue()) }}
                     className="text-slate-400 hover:text-[#0f2044] underline"
                   >
                     change
@@ -339,7 +346,7 @@ function MfrRow({
               <div className="flex items-center gap-1">
                 <input
                   type="month"
-                  defaultValue={m.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()}
+                  defaultValue={toDateStr(m.price_list_effective_date) ?? currentMonthValue()}
                   onChange={e => setDateOverride(e.target.value)}
                   className="border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#0f2044]"
                 />
@@ -350,7 +357,7 @@ function MfrRow({
               <span className="text-xs text-slate-400">
                 {m.price_list_effective_date ? formatEffectiveDate(m.price_list_effective_date) : 'No date'}
                 {' · '}
-                <button onClick={() => { setEditingDate(true); setDateOverride(m.price_list_effective_date?.slice(0, 7) ?? currentMonthValue()) }} className="hover:text-[#0f2044] underline">
+                <button onClick={() => { setEditingDate(true); setDateOverride(toDateStr(m.price_list_effective_date) ?? currentMonthValue()) }} className="hover:text-[#0f2044] underline">
                   change
                 </button>
               </span>

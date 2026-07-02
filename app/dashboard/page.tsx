@@ -95,8 +95,9 @@ export default async function DashboardPage() {
   )
 }
 
-function formatEffectiveDate(dateStr: string | null) {
-  if (!dateStr) return null
+function formatEffectiveDate(val: unknown): string | null {
+  if (!val) return null
+  const dateStr = val instanceof Date ? val.toISOString().slice(0, 10) : String(val).slice(0, 10)
   const [year, month] = dateStr.split('-')
   return new Date(Number(year), Number(month) - 1, 1)
     .toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
