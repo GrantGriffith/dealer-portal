@@ -10,6 +10,19 @@ const sql = postgres(connectionString, {
   max: 1,
   idle_timeout: 20,
   connect_timeout: 10,
+  // Return date/timestamp columns as plain strings instead of Date objects.
+  // The postgres library converts DATE/TIMESTAMP columns to JS Date objects by default,
+  // which causes RangeError when an invalid date is encountered or when the Date object
+  // is later passed to functions expecting a string. Returning as strings matches our
+  // TypeScript interfaces (created_at: string, price_list_effective_date: string | null).
+  types: {
+    date: {
+      to: 1082,
+      from: [1082, 1114, 1184], // date, timestamp, timestamptz
+      serialize: (v: string | Date) => v instanceof Date ? v.toISOString() : String(v),
+      parse: (v: string) => v,
+    },
+  },
 })
 
 export { sql }

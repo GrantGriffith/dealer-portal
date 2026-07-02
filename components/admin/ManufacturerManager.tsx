@@ -3,6 +3,55 @@
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 
+// Upload a file directly to R2 via a presigned URL.
+// This bypasses Vercel's 4.5 MB serverless-function body limit — files go
+// browser → R2 without passing through Next.js.
+const MIME_MAP: Record<string, string> = {
+  pdf:  'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xls:  'application/vnd.ms-excel',
+  csv:  'text/csv',
+  png:  'image/png',
+  jpg:  'image/jpeg', jpeg: 'image/jpeg',
+  gif:  'image/gif',  webp: 'image/webp', svg: 'image/svg+xml',
+}
+
+async function uploadToR2(
+  file: File,
+  opts: { type: 'logo' | 'pricelist'; manufacturerId: number; tierId?: number | null }
+): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const contentType = file.type || MIME_MAP[ext] || 'application/octet-stream'
+
+  // 1. Get a short-lived presigned PUT URL from our server
+  const presignRes = await fetch('/api/admin/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileType: contentType,
+      type: opts.type,
+      manufacturerId: opts.manufacturerId,
+      tierId: opts.tierId ?? null,
+    }),
+  })
+  if (!presignRes.ok) {
+    const err = await presignRes.json().catch(() => ({}))
+    throw new Error(err.details || err.error || 'Could not get upload URL')
+  }
+  const { presignedUrl, publicUrl } = await presignRes.json()
+
+  // 2. PUT the file directly to R2 — no Vercel size limit applies here
+  const putRes = await fetch(presignedUrl, {
+    method: 'PUT',
+    body: file,
+    headers: { 'Content-Type': contentType },
+  })
+  if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+
+  return publicUrl
+}
+
 function currentMonthValue() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -87,25 +136,17 @@ function TierPanel({ mfr }: { mfr: Manufacturer }) {
   async function uploadTierPriceList(tier: Tier, file: File) {
     setUploadingTierId(tier.id)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('type', 'pricelist')
-      fd.append('manufacturerId', String(mfr.id))
-      fd.append('tierId', String(tier.id))
-      const uploadRes = await fetch('/api/admin/upload', { method: 'POST', body: fd })
-      const data = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(data.details || data.error || 'Upload failed')
+      const url = await uploadToR2(file, { type: 'pricelist', manufacturerId: mfr.id, tierId: tier.id })
 
-      // Auto-date to current month
       const effectiveDate = currentMonthValue() + '-01'
       const patchRes = await fetch(`/api/admin/manufacturers/${mfr.id}/tiers`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tierId: tier.id, priceListUrl: data.url, priceListEffectiveDate: effectiveDate }),
+        body: JSON.stringify({ tierId: tier.id, priceListUrl: url, priceListEffectiveDate: effectiveDate }),
       })
       const updated = await patchRes.json()
       setTiers(prev => (prev ?? []).map(t => t.id === updated.id ? updated : t))
-    } catch (err) {
+    } catch (err: unknown) {
       alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)))
     }
     setUploadingTierId(null)
@@ -245,17 +286,11 @@ function MfrRow({
   async function handleUpload(type: 'logo' | 'pricelist', file: File) {
     setUploading(type)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('type', type)
-      fd.append('manufacturerId', String(m.id))
-      const uploadRes = await fetch('/api/admin/upload', { method: 'POST', body: fd })
-      const data = await uploadRes.json()
-      if (!uploadRes.ok) throw new Error(data.details || data.error || 'Upload failed')
+      const url = await uploadToR2(file, { type, manufacturerId: m.id })
 
       const patch: Record<string, string> = type === 'logo'
-        ? { logoUrl: data.url }
-        : { priceListUrl: data.url, priceListEffectiveDate: currentMonthValue() + '-01' }
+        ? { logoUrl: url }
+        : { priceListUrl: url, priceListEffectiveDate: currentMonthValue() + '-01' }
 
       const patchRes = await fetch(`/api/admin/manufacturers/${m.id}`, {
         method: 'PATCH',
@@ -264,7 +299,7 @@ function MfrRow({
       })
       const updated = await patchRes.json()
       onUpdated(updated)
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Upload error:', err)
       alert('Upload failed: ' + (err instanceof Error ? err.message : String(err)))
     }
