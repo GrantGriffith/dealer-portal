@@ -33,11 +33,28 @@ export async function POST(req: NextRequest) {
   }
 
   const tierId = formData.get('tierId') as string | null
-  const ext = file.name.split('.').pop()
+
+  // Use only the last extension so double-extension files (e.g. file.xlsx.pdf) work correctly
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
   const folder = type === 'logo' ? 'logos' : 'pricelists'
   const key = tierId
     ? `${folder}/manufacturer-${manufacturerId}-tier-${tierId}-${Date.now()}.${ext}`
     : `${folder}/manufacturer-${manufacturerId}-${Date.now()}.${ext}`
+
+  // Browsers sometimes send an empty content-type for unusual filenames — fall back by extension
+  const MIME: Record<string, string> = {
+    pdf:  'application/pdf',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls:  'application/vnd.ms-excel',
+    csv:  'text/csv',
+    png:  'image/png',
+    jpg:  'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif:  'image/gif',
+    webp: 'image/webp',
+    svg:  'image/svg+xml',
+  }
+  const contentType = file.type || MIME[ext] || 'application/octet-stream'
 
   try {
     const bytes = await file.arrayBuffer()
@@ -45,7 +62,7 @@ export async function POST(req: NextRequest) {
       Bucket: process.env.R2_BUCKET_NAME ?? 'dealer-portal',
       Key: key,
       Body: Buffer.from(bytes),
-      ContentType: file.type,
+      ContentType: contentType,
     }))
 
     const publicUrl = `${process.env.R2_PUBLIC_URL}/${key}`
