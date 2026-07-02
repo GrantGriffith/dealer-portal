@@ -19,6 +19,11 @@ const r2 = new S3Client({
     accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
   },
+  // Disable automatic checksum injection — checksums in presigned PUT URLs
+  // require the browser to compute and send matching checksum headers, which
+  // a plain fetch() cannot do and breaks CORS preflight negotiation.
+  requestChecksumCalculation: 'WHEN_REQUIRED' as never,
+  responseChecksumValidation: 'WHEN_REQUIRED' as never,
 })
 
 const MIME: Record<string, string> = {
